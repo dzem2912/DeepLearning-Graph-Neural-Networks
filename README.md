@@ -1,2 +1,3 @@
-# DL_GNN
-Graph Neural Network project for Deep Learning course
+# Deep Learning - Graph Neural Networks
+
+python3 main.py
