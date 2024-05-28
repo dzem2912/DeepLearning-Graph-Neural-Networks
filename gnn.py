@@ -158,16 +158,16 @@ class GraphNeuralNetwork(torch.nn.Module):
     def getNumFeatures(self):
         return self.num_features
 
-    def forward(self, x, edge_index, edge_attr, batch):
+    def forward(self, x, edge_index, edge_attr, batch, edge_weight=None):
         # Transform edge_attr to consistent dimension
         edge_attr = self.edge_transform(edge_attr)
 
         x1 = self.relu(self.bn_layers[0](self.conv_in(x, edge_index, edge_attr)))
 
-        x2 = self.relu(self.bn_layers[1](self.conv_layers[0](x1, edge_index, edge_attr))) + x1
-        x3 = self.relu(self.bn_layers[2](self.conv_layers[1](x2, edge_index, edge_attr))) + x2
-        x4 = self.relu(self.bn_layers[3](self.conv_layers[2](x3, edge_index, edge_attr))) + x3
-        x5 = self.relu(self.bn_layers[4](self.conv_layers[3](x4, edge_index, edge_attr))) + x4
+        x2 = self.relu(self.bn_layers[1](self.conv_layers[0](x1, edge_index, edge_attr, edge_weight))) + x1
+        x3 = self.relu(self.bn_layers[2](self.conv_layers[1](x2, edge_index, edge_attr, edge_weight))) + x2
+        x4 = self.relu(self.bn_layers[3](self.conv_layers[2](x3, edge_index, edge_attr, edge_weight))) + x3
+        x5 = self.relu(self.bn_layers[4](self.conv_layers[3](x4, edge_index, edge_attr, edge_weight))) + x4
 
         x = global_max_pool(x5, batch)
 

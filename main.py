@@ -38,9 +38,14 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
         model = simpleGNN(dim=32, num_features=num_features, num_classes=num_classes, dropout_probability=dropout_prob)
         print(summary(model))
     elif name == 'GraphNeuralNetwork':
-        model = GraphNeuralNetwork(dim=256, num_features=num_features, num_classes=num_classes, edge_attr_dim=3, dropout_probability=dropout_prob)
+        model = GraphNeuralNetwork(dim=256, num_features=num_features, num_classes=num_classes, edge_attr_dim=3, dropout_probability=dropout_prob).cuda()
 
     optimizer: Adam = Adam(model.parameters(), lr=lr)
+
+    if torch.cuda.is_available():
+        device: str = 'cuda:0'
+    else:
+        device: str = 'cpu'
 
     def train(epoch: int):
         """
@@ -56,10 +61,12 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
         for data in train_loader:
             optimizer.zero_grad() # Sets the gradients to 0
 
+            data = data.to(device)
             output = model(data.x, data.edge_index, data.edge_attr, data.batch)
-            target = F.one_hot(data.y, num_classes=num_classes).float()
-
-            loss = torch.nn.BCELoss()(output, target)
+            target = F.one_hot(data.y, num_classes=num_classes).float().cuda()
+            
+            loss_fn = torch.nn.BCELoss().cuda()
+            loss = loss_fn(output, target)
             loss.backward()
 
             total_train_loss += loss.item() * data.num_graphs
@@ -68,11 +75,14 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
         # Validation loop 
         with torch.no_grad(): # disable gradient computation
             for data in val_loader:
+                data = data.to(device)
                 output = model(data.x, data.edge_index, data.edge_attr, data.batch)
+                output = torch.Tensor(output).cuda()
 
-                target = F.one_hot(data.y, num_classes=num_classes).float()
+                target = F.one_hot(data.y, num_classes=num_classes).float().cuda()
                 
-                val_loss = torch.nn.BCELoss()(output, target)
+                loss_fn = torch.nn.BCELoss().cuda()
+                val_loss = loss_fn(output, target)
 
                 total_val_loss += val_loss.item() * data.num_graphs
         
@@ -90,6 +100,7 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
         all_lables = []
         
         for data in test_loader:
+            data = data.to(device)
             outputs = model(data.x, data.edge_index, data.edge_attr, data.batch)
             predicted_class = []
             for output in outputs:
@@ -98,8 +109,9 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
                 else:
                      predicted_class.append(1)
             
-            predicted_class = torch.tensor(predicted_class)
-            correct += predicted_class.eq(data.y).sum().item()
+            predicted_class = torch.tensor(predicted_class).cpu()
+            true_class = data.y.cpu()
+            correct += predicted_class.eq(true_class).sum().item()
 
             all_predictions.extend(predicted_class.cpu().numpy())
             all_lables.extend(data.y.cpu().numpy())
@@ -115,7 +127,8 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
 
     train_losses = []
     val_losses = []
-    for epoch in range(1, 101):
+    num_epochs: int = 100
+    for epoch in range(1, num_epochs + 1):
         train_loss, val_loss = train(epoch)
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -140,8 +153,8 @@ def test_model(name: str, lr:float, dropout_prob: float, train_loader:DataLoader
     plt.title('Confusion Matrix')
     plt.show()
     
-    plt.plot(range(1, 201), train_losses, label='Training Loss')
-    plt.plot(range(1, 201), val_losses, label='Validation Loss')
+    plt.plot(range(1, num_epochs + 1), train_losses, label='Training Loss')
+    plt.plot(range(1, num_epochs + 1), val_losses, label='Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
@@ -161,9 +174,9 @@ if __name__ == "__main__":
 
     #data = random.choice([x for x in dataset if not x.y.item()])
     data = dataset[50]
-    print(data)
-    molecule_graph = to_molecule(data)
-    print("Molecule element:\n", molecule_graph)
+    #print(data)
+    #molecule_graph = to_molecule(data)
+    #print("Molecule element:\n", molecule_graph)
     #visualize_molecule(molecule_graph)
     #plt.show()
     #exit(0)
@@ -179,22 +192,21 @@ if __name__ == "__main__":
     print(f"length of val: {len(val_loader.dataset)}")
     print(f"length of test: {len(test_loader.dataset)}")
 
-    
     lr: float = 0.0001
     dp: float = 0.3
 
     model = test_model("GraphNeuralNetwork", lr, dp, train_loader, val_loader, test_loader, dataset.num_features, dataset.num_classes)
 
     # Explanations
-    torch.save(model, "model_gnn.pth")
+    torch.save(model, "GNN_MK2.pth")
     
     data = random.choice([t for t in test_dataset])
-    molecule = to_molecule(data)
-    print(data)
     edge_mask = explain(data=data, target=0)
     edge_mask_dict = aggregate_edge_directions(edge_mask, data=data)
     plt.figure(figsize=(10, 5))
     plt.title('Salienicy')
+
+    molecule = to_molecule(data)
     visualize_molecule(molecule, edge_mask_dict)
     visualize_molecule(molecule, None)
     plt.show()
